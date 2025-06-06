@@ -65,4 +65,17 @@ User.prototype.toJSON = function() {
   return user;
 };
 
+// Adicionar no model User
+
+User.addHook('afterCreate', async (user, options) => {
+  const walletService = require('../services/wallet.service');
+
+  try {
+    await walletService.createWallet(user.id);
+    console.log(`✅ Carteira criada para usuário: ${user.name}`);
+  } catch (error) {
+    console.error(`❌ Erro ao criar carteira para ${user.name}:`, error);
+  }
+});
+
 module.exports = User;

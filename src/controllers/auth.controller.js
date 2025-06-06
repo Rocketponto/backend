@@ -1,7 +1,8 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 const emailService = require('../services/sendMail.service')
-const { updateUser, updateRoleUserService, updateStatusUserService } = require('../services/auth.service')
+const { updateUser, updateRoleUserService, updateStatusUserService } = require('../services/auth.service');
+const { createWallet } = require('../services/wallet.service');
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -22,6 +23,8 @@ const register = async (req, res) => {
 
     const user = await User.create({ name, email, password, role });
     const token = generateToken(user);
+
+    //await createWallet(user.id)
 
     await emailService.sendWelcomeEmail(email, name)
 

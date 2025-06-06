@@ -1,0 +1,27 @@
+const express = require('express');
+const createWalletsExisting = require('../seeders/createWalletUser')
+const router = express.Router();
+const { authMiddleware, authorize } = require('../middleware/auth.middleware');
+const walletController = require('../controllers/wallet.controller')
+
+// Todas as rotas precisam de autenticação
+router.use(authMiddleware);
+
+/*
+router.post('/create-existing-wallets',
+   authMiddleware,
+   createWalletsExisting.createWalletsForExistingUsers
+);
+*/
+
+router.get('/get-wallet/:id', authMiddleware, walletController.getWalletUserById)
+
+router.post('/request-spending/:id', walletController.requestSpending);
+router.get('/my-requests', walletController.getMyRequest);
+
+router.get('/pending-requests', authorize('DIRETOR'), walletController.getPendingRequests);
+router.put('/approve/:transactionId', authorize('DIRETOR'), walletController.approveSpendingRequest);
+router.put('/reject/:transactionId', authorize('DIRETOR'), walletController.rejectSpendingRequest);
+
+
+module.exports = router;
