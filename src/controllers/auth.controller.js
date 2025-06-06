@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const emailService = require('../services/sendMail.service')
+const { updateUser, updateRoleUserService, updateStatusUserService } = require('../services/auth.service')
 
 const generateToken = (user) => {
   return jwt.sign(
@@ -20,6 +22,8 @@ const register = async (req, res) => {
 
     const user = await User.create({ name, email, password, role });
     const token = generateToken(user);
+
+    await emailService.sendWelcomeEmail(email, name)
 
     res.status(201).json({
       message: 'Usuário criado com sucesso',
@@ -60,9 +64,13 @@ const getProfile = async (req, res) => {
   res.json({ user: req.user });
 };
 
-const getAllProfiles = async (req, res) => {
+const getAllProfilesActive = async (req, res) => {
   try {
-    const users = await User.findAll()
+    const users = await User.findAll({
+      where: {
+        isActive: true
+      }
+    })
 
     res.json({
       success: true,
@@ -75,7 +83,60 @@ const getAllProfiles = async (req, res) => {
       message: error.message
     })
   }
-
 }
 
-module.exports = { register, login, getProfile, getAllProfiles };
+const getAllProfiles = async (req, res) => {
+  try {
+    const users = await User.findAll({
+      attributes: { exclude: ['password'] },
+      order: [
+        ['isActive', 'DESC'],
+      ]
+    });
+
+    res.json({
+      success: true,
+      data: users
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: 'Erro ao buscar usuários',
+      message: error.message
+    })
+  }
+}
+
+const updateRoleUser = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { role } = req.body
+
+    await updateRoleUserService(id, role)
+
+    res.status(201).json({
+      success: true,
+      message: 'Cargo do usuário atualizado com sucesso.'
+    })
+  } catch (error) {
+    throw new Error('Erro ao atualizar cargo do usuário', error.message)
+  }
+}
+
+const updateStatusUser = async (req, res) => {
+  try {
+    const { id } = req.params
+    const { status } = req.body
+
+    await updateStatusUserService(id, status)
+
+    res.status(201).json({
+      success: true,
+      message: 'Status do usuário atualizado com sucesso.'
+    })
+  } catch (error) {
+    throw new Error('Erro ao atualizar status do usuário', error.message)
+  }
+}
+
+module.exports = { register, login, getProfile, getAllProfilesActive, updateUser, updateRoleUser, updateStatusUser, getAllProfiles };
