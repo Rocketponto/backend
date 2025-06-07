@@ -1,5 +1,7 @@
-const { User, Wallet, Transaction } = require('../relations/pointRecord.relations'); // ✅ Usando relações
+const { User, Wallet, Transaction } = require('../relations/pointRecord.relations');
+const { Op } = require('sequelize');
 const sequelize = require('../config/database');
+const auxiliaryFunction = require('../utils/auxiliaryFunc')
 
 class WalletService {
 
@@ -14,7 +16,6 @@ class WalletService {
             isActive: true
          });
 
-         console.log(`✅ Carteira criada para usuário ID: ${userId}`);
          return wallet;
       } catch (error) {
          console.error(`❌ Erro ao criar carteira:`, error);
@@ -23,7 +24,7 @@ class WalletService {
    }
 
    // Buscar carteira do usuário com relacionamentos
-   async getWalletByUserId(userId) {
+   async getWalletWithRelationByUserId(userId) {
       try {
          const wallet = await Wallet.findOne({
             where: { userId },
@@ -52,7 +53,80 @@ class WalletService {
       }
    }
 
-   // Adicionar moedas (crédito)
+   async getWalletByUserId(userId) {
+      try {
+         const wallet = await Wallet.findOne({
+            where: { userId },
+         });
+
+         if (!wallet) {
+            throw new Error('Carteira não encontrada');
+         }
+
+         return wallet;
+      } catch (error) {
+         throw new Error(`Erro ao buscar carteira: ${error.message}`);
+      }
+   }
+
+   async removeCoins(userId, amount, title, description, reference = null, processedBy = null) {
+      const transaction = await sequelize.transaction();
+
+      try {
+         const wallet = await Wallet.findOne({
+            where: { userId },
+            transaction
+         });
+
+         if (!wallet) {
+            throw new Error('Carteira não encontrada');
+         }
+
+         const balanceBefore = parseFloat(wallet.balance);
+         const amountToRemove = parseFloat(amount);
+
+         if (balanceBefore < amountToRemove) {
+            throw new Error(`Saldo insuficiente. Saldo atual: ${balanceBefore}, Tentativa de remoção: ${amountToRemove}`);
+         }
+
+         const newBalance = balanceBefore - amountToRemove;
+         const newTotalSpent = parseFloat(wallet.totalSpent) + amountToRemove;
+
+         await wallet.update({
+            balance: newBalance,
+            totalSpent: newTotalSpent
+
+         }, { transaction });
+
+         const transactionRecord = await Transaction.create({
+            walletId: wallet.id,
+            type: 'DEBIT',
+            amount: amountToRemove,
+            title,
+            description,
+            reference,
+            processedBy,
+            balanceBefore,
+            balanceAfter: newBalance,
+            status: 'COMPLETED'
+         }, { transaction });
+
+         await transaction.commit();
+
+         return {
+            wallet: {
+               ...wallet.toJSON(),
+               balance: newBalance,
+               totalSpent: newTotalSpent
+            },
+            transaction: transactionRecord
+         };
+      } catch (error) {
+         await transaction.rollback();
+         throw new Error(`Erro ao remover moedas: ${error.message}`);
+      }
+   }
+
    async addCoins(userId, amount, title, description, reference = null, processedBy = null) {
       const transaction = await sequelize.transaction();
 
@@ -70,13 +144,11 @@ class WalletService {
          const newBalance = balanceBefore + parseFloat(amount);
          const newTotalEarned = parseFloat(wallet.totalEarned) + parseFloat(amount);
 
-         // Atualizar carteira
          await wallet.update({
             balance: newBalance,
             totalEarned: newTotalEarned
          }, { transaction });
 
-         // Criar transação
          const transactionRecord = await Transaction.create({
             walletId: wallet.id,
             type: 'CREDIT',
@@ -92,7 +164,6 @@ class WalletService {
 
          await transaction.commit();
 
-         console.log(`✅ ${amount} moedas adicionadas para usuário ${userId}`);
          return { wallet, transaction: transactionRecord };
       } catch (error) {
          await transaction.rollback();
@@ -100,7 +171,6 @@ class WalletService {
       }
    }
 
-   // Gastar moedas (débito)
    async spendCoins(userId, amount, title, description, reference = null, processedBy = null) {
       const transaction = await sequelize.transaction();
 
@@ -123,13 +193,11 @@ class WalletService {
          const newBalance = balanceBefore - parseFloat(amount);
          const newTotalSpent = parseFloat(wallet.totalSpent) + parseFloat(amount);
 
-         // Atualizar carteira
          await wallet.update({
             balance: newBalance,
             totalSpent: newTotalSpent
          }, { transaction });
 
-         // Criar transação
          const transactionRecord = await Transaction.create({
             walletId: wallet.id,
             type: 'DEBIT',
@@ -145,7 +213,6 @@ class WalletService {
 
          await transaction.commit();
 
-         console.log(`✅ ${amount} moedas gastas pelo usuário ${userId}`);
          return { wallet, transaction: transactionRecord };
       } catch (error) {
          await transaction.rollback();
@@ -153,7 +220,6 @@ class WalletService {
       }
    }
 
-   // Histórico de transações com relacionamentos
    async getTransactionHistory(userId, page = 1, limit = 10) {
       try {
          const wallet = await this.getWalletByUserId(userId);
@@ -236,8 +302,6 @@ class WalletService {
             status: 'PENDING'
          });
 
-         console.log(`📝 Solicitação de gasto criada: ${amount} RocketCoins para ${title}`);
-
          return {
             success: true,
             message: 'Solicitação de gasto enviada para aprovação',
@@ -249,7 +313,6 @@ class WalletService {
       }
    }
 
-   // ✅ NOVO: Aprovar solicitação de gasto
    async approveSpendingRequest(transactionId, directorId, approvalNote = null) {
       const transaction = await sequelize.transaction();
 
@@ -303,8 +366,6 @@ class WalletService {
 
          await transaction.commit();
 
-         console.log(`✅ Gasto aprovado: ${pendingTransaction.amount} RocketCoins para ${pendingTransaction.wallet.user.name}`);
-
          return {
             success: true,
             message: 'Solicitação aprovada com sucesso',
@@ -317,7 +378,6 @@ class WalletService {
       }
    }
 
-   // ✅ NOVO: Rejeitar solicitação de gasto
    async rejectSpendingRequest(transactionId, directorId, rejectionReason) {
       try {
          const pendingTransaction = await Transaction.findOne({
@@ -347,8 +407,6 @@ class WalletService {
             description: `${pendingTransaction.description} | Rejeitado: ${rejectionReason}`
          });
 
-         console.log(`❌ Gasto rejeitado: ${pendingTransaction.amount} RocketCoins para ${pendingTransaction.wallet.user.name}`);
-
          return {
             success: true,
             message: 'Solicitação rejeitada',
@@ -360,7 +418,6 @@ class WalletService {
       }
    }
 
-   // ✅ NOVO: Listar solicitações pendentes (para diretores)
    async getPendingRequests(page = 1, limit = 10) {
       try {
          const offset = (page - 1) * limit;
@@ -381,7 +438,7 @@ class WalletService {
                   }]
                }
             ],
-            order: [['createdAt', 'ASC']], // Mais antigas primeiro
+            order: [['createdAt', 'ASC']],
             limit: parseInt(limit),
             offset: parseInt(offset)
          });
@@ -400,7 +457,6 @@ class WalletService {
       }
    }
 
-   // ✅ NOVO: Minhas solicitações (para usuário comum)
    async getMyRequests(userId, page = 1, limit = 5) {
       try {
          const wallet = await this.getWalletByUserId(userId);
@@ -450,6 +506,250 @@ class WalletService {
          };
       } catch (error) {
          throw new Error(`Erro ao buscar minhas solicitações: ${error.message}`);
+      }
+   }
+
+   async getDashboardStatistics() {
+      try {
+         const totalUsuarios = await User.count({
+            include: [{
+               model: Wallet,
+               as: 'wallet',
+               required: true
+            }]
+         });
+
+         const totalDistribuidoResult = await Wallet.sum('totalEarned');
+         const totalDistribuido = totalDistribuidoResult || 0;
+
+         const solicitacoesPendentes = await Transaction.count({
+            where: {
+               status: 'PENDING',
+               type: 'DEBIT'
+            }
+         });
+
+         const hoje = new Date();
+         const inicioHoje = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+         const fimHoje = new Date(inicioHoje);
+         fimHoje.setDate(fimHoje.getDate() + 1);
+
+         const transacoesHoje = await Transaction.count({
+            where: {
+               status: 'COMPLETED',
+               createdAt: {
+                  [Op.gte]: inicioHoje,
+                  [Op.lt]: fimHoje
+               }
+            }
+         });
+
+         return {
+            success: true,
+            totalUsuarios,
+            totalDistribuido: parseFloat(totalDistribuido).toFixed(2),
+            solicitacoesPendentes,
+            transacoesHoje
+         };
+      } catch (error) {
+         throw new Error(`Erro ao buscar estatísticas: ${error.message}`);
+      }
+   }
+
+   async buscarRelatorioTransacoes({ dataInicio, dataFim, tipo, page = 1, limit = 20 }) {
+      try {
+
+         const offset = (page - 1) * limit;
+
+         const whereConditions = {
+            status: 'COMPLETED'
+         };
+
+         if (tipo && tipo !== 'todos') {
+            whereConditions.type = tipo.toUpperCase();
+         }
+
+         if (dataInicio || dataFim) {
+            whereConditions.createdAt = {};
+
+            if (dataInicio) {
+               const inicio = new Date(dataInicio);
+               inicio.setHours(0, 0, 0, 0);
+               whereConditions.createdAt[Op.gte] = inicio;
+            }
+
+            if (dataFim) {
+               const fim = new Date(dataFim);
+               fim.setHours(23, 59, 59, 999);
+               whereConditions.createdAt[Op.lte] = fim;
+            }
+         }
+
+         // ✅ Buscar transações
+         const { rows: transacoes, count } = await Transaction.findAndCountAll({
+            where: whereConditions,
+            include: [
+               {
+                  model: Wallet,
+                  as: 'wallet',
+                  attributes: ['id', 'userId'],
+                  include: [{
+                     model: User,
+                     as: 'user',
+                     attributes: ['id', 'name', 'email', 'role']
+                  }]
+               },
+               {
+                  model: User,
+                  as: 'processor',
+                  attributes: ['id', 'name', 'email'],
+                  required: false
+               }
+            ],
+            order: [['createdAt', 'DESC']],
+            limit: parseInt(limit),
+            offset: parseInt(offset)
+         });
+
+         // ✅ CORREÇÃO: Calcular estatísticas usando Sequelize ao invés de SQL raw
+         const estatisticasQuery = {
+            where: whereConditions,
+            attributes: [
+               [sequelize.fn('COUNT', '*'), 'totalTransacoes'],
+               [sequelize.fn('COALESCE',
+                  sequelize.fn('SUM',
+                     sequelize.literal("CASE WHEN type = 'CREDIT' THEN amount ELSE 0 END")
+                  ), 0
+               ), 'totalCreditos'],
+               [sequelize.fn('COALESCE',
+                  sequelize.fn('SUM',
+                     sequelize.literal("CASE WHEN type = 'DEBIT' THEN amount ELSE 0 END")
+                  ), 0
+               ), 'totalDebitos'],
+               [sequelize.fn('COALESCE', sequelize.fn('SUM', sequelize.col('amount')), 0), 'valorTotal'],
+               [sequelize.fn('COUNT', sequelize.fn('DISTINCT', sequelize.col('walletId'))), 'usuariosUnicos']
+            ],
+            raw: true
+         };
+
+         const estatisticas = await Transaction.findOne(estatisticasQuery);
+
+         return {
+            success: true,
+            transacoes: transacoes,
+            pagination: {
+               currentPage: parseInt(page),
+               totalPages: Math.ceil(count / limit),
+               totalItems: count,
+               itemsPerPage: parseInt(limit)
+            },
+            estatisticas: {
+               totalTransacoes: parseInt(estatisticas.totalTransacoes || 0),
+               totalCreditos: parseFloat(estatisticas.totalCreditos || 0).toFixed(2),
+               totalDebitos: parseFloat(estatisticas.totalDebitos || 0).toFixed(2),
+               valorTotal: parseFloat(estatisticas.valorTotal || 0).toFixed(2),
+               usuariosUnicos: parseInt(estatisticas.usuariosUnicos || 0),
+               saldoLiquido: (parseFloat(estatisticas.totalCreditos || 0) - parseFloat(estatisticas.totalDebitos || 0)).toFixed(2)
+            },
+            filtros: {
+               dataInicio: dataInicio || null,
+               dataFim: dataFim || null,
+               tipo: tipo || 'todos',
+               periodo: dataInicio && dataFim ?
+                  `${dataInicio} até ${dataFim}` :
+                  dataInicio ? `A partir de ${dataInicio}` :
+                  dataFim ? `Até ${dataFim}` : 'Todos os períodos'
+            }
+         };
+      } catch (error) {
+         console.error('❌ Erro ao buscar relatório:', error);
+         throw new Error(`Erro ao buscar relatório de transações: ${error.message}`);
+      }
+   }
+
+   async exportarRelatorio({ dataInicio, dataFim, tipo }) {
+      try {
+         console.log('📋 Exportando relatório CSV:', { dataInicio, dataFim, tipo });
+
+         const whereConditions = {
+            status: 'COMPLETED'
+         };
+
+         // ✅ Filtro por tipo
+         if (tipo && tipo !== 'todos') {
+            whereConditions.type = tipo.toUpperCase();
+         }
+
+         // ✅ Filtro por data
+         if (dataInicio || dataFim) {
+            whereConditions.createdAt = {};
+
+            if (dataInicio) {
+               const inicio = new Date(dataInicio);
+               inicio.setHours(0, 0, 0, 0);
+               whereConditions.createdAt[Op.gte] = inicio;
+            }
+
+            if (dataFim) {
+               const fim = new Date(dataFim);
+               fim.setHours(23, 59, 59, 999);
+               whereConditions.createdAt[Op.lte] = fim;
+            }
+         }
+
+         // ✅ Buscar TODAS as transações (sem limit para export completo)
+         const transacoes = await Transaction.findAll({
+            where: whereConditions,
+            include: [
+               {
+                  model: Wallet,
+                  as: 'wallet',
+                  attributes: ['id', 'userId', 'balance'],
+                  include: [{
+                     model: User,
+                     as: 'user',
+                     attributes: ['id', 'name', 'email', 'role']
+                  }]
+               },
+               {
+                  model: User,
+                  as: 'processor',
+                  attributes: ['id', 'name', 'email'],
+                  required: false
+               }
+            ],
+            order: [['createdAt', 'DESC']]
+         });
+
+         const csvContent = auxiliaryFunction.generateCSV(transacoes);
+
+         const totalCreditos = transacoes
+            .filter(t => t.type === 'CREDIT')
+            .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+
+         const totalDebitos = transacoes
+            .filter(t => t.type === 'DEBIT')
+            .reduce((sum, t) => sum + parseFloat(t.amount), 0);
+
+         return {
+            success: true,
+            data: csvContent,
+            filename: `relatorio-rocketcoins-${dataInicio || 'inicio'}-${dataFim || 'fim'}.csv`,
+            metadata: {
+               totalTransacoes: transacoes.length,
+               totalCreditos: totalCreditos.toFixed(2),
+               totalDebitos: totalDebitos.toFixed(2),
+               saldoLiquido: (totalCreditos - totalDebitos).toFixed(2),
+               dataGeracao: new Date().toLocaleString('pt-BR'),
+               filtros: {
+                  dataInicio: dataInicio || 'Não informado',
+                  dataFim: dataFim || 'Não informado',
+                  tipo: tipo || 'Todos'
+               }
+            }
+         };
+      } catch (error) {
+         throw new Error(`Erro ao exportar relatório: ${error.message}`);
       }
    }
 }
