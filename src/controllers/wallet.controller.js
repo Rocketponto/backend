@@ -104,10 +104,29 @@ class WalletController {
 
    async getMyRequest(req, res) {
       try {
-         const userId = req.user.id;
-         const { page = 1, limit = 10 } = req.query;
+         const { id } = req.params;
+         const { page = 1, limit = 5 } = req.query;
 
-         const result = await walletService.getMyRequests(userId, page, limit);
+         const result = await walletService.getMyRequests(id, page, limit);
+
+         res.json({
+            success: true,
+            ...result
+         });
+      } catch (error) {
+         res.status(400).json({
+            success: false,
+            error: error.message
+         });
+      }
+   }
+
+   async getTransactionHistory(req, res) {
+      try {
+         const { id } = req.params;
+         const { page = 1, limit = 5 } = req.query;
+
+         const result = await walletService.getTransactionHistory(id, page, limit);
 
          res.json({
             success: true,

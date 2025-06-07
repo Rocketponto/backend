@@ -17,7 +17,8 @@ router.post('/create-existing-wallets',
 router.get('/get-wallet/:id', authMiddleware, walletController.getWalletUserById)
 
 router.post('/request-spending/:id', walletController.requestSpending);
-router.get('/my-requests', walletController.getMyRequest);
+router.get('/my-requests/:id', walletController.getMyRequest);
+router.get('/my-history-transactions/:id', walletController.getTransactionHistory);
 
 router.get('/pending-requests', authorize('DIRETOR'), walletController.getPendingRequests);
 router.put('/approve/:transactionId', authorize('DIRETOR'), walletController.approveSpendingRequest);

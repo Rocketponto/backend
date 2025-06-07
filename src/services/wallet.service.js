@@ -158,14 +158,19 @@ class WalletService {
       try {
          const wallet = await this.getWalletByUserId(userId);
          const offset = (page - 1) * limit;
+         let totalEarned = 0
+         let totalSpent = 0
 
          const { rows: transactions, count } = await Transaction.findAndCountAll({
-            where: { walletId: wallet.id },
+            where: {
+               walletId: wallet.id,
+               status: 'COMPLETED'
+            },
             include: [
                {
-                  model: User,
-                  as: 'processor',
-                  attributes: ['id', 'name', 'email'],
+                  model: Wallet,
+                  as: 'wallet',
+                  attributes: ['totalEarned', 'totalSpent'],
                   required: false
                }
             ],
@@ -174,14 +179,31 @@ class WalletService {
             offset: parseInt(offset)
          });
 
+         const walletData = {
+            totalEarned: wallet.totalEarned,
+            totalSpent: wallet.totalSpent
+         }
+
+         const returnTransactions = transactions.map(transaction => (
+            {
+               id: transaction.id,
+               walletId: transaction.walletId,
+               type: transaction.type,
+               amount: transaction.amount,
+               title: transaction.title,
+               description: transaction.description,
+            }
+         ))
+
          return {
-            transactions,
+            transactions: returnTransactions,
             pagination: {
                currentPage: parseInt(page),
                totalPages: Math.ceil(count / limit),
                totalItems: count,
                itemsPerPage: parseInt(limit)
-            }
+            },
+            wallet: walletData
          };
       } catch (error) {
          throw new Error(`Erro ao buscar histórico: ${error.message}`);
@@ -196,13 +218,11 @@ class WalletService {
             throw new Error('Carteira não encontrada');
          }
 
-         // Verificar se tem saldo suficiente
          const currentBalance = parseFloat(wallet.balance);
          if (currentBalance < parseFloat(amount)) {
             throw new Error('Saldo insuficiente para essa solicitação');
          }
 
-         // Criar transação pendente
          const pendingTransaction = await Transaction.create({
             walletId: wallet.id,
             type: 'DEBIT',
@@ -210,10 +230,10 @@ class WalletService {
             title,
             description,
             reference,
-            processedBy: null, // Ainda não processado
+            processedBy: null,
             balanceBefore: currentBalance,
-            balanceAfter: currentBalance - parseFloat(amount), // Saldo após aprovação
-            status: 'PENDING' // ✅ Status pendente
+            balanceAfter: currentBalance - parseFloat(amount),
+            status: 'PENDING'
          });
 
          console.log(`📝 Solicitação de gasto criada: ${amount} RocketCoins para ${title}`);
@@ -234,7 +254,6 @@ class WalletService {
       const transaction = await sequelize.transaction();
 
       try {
-         // Buscar transação pendente
          const pendingTransaction = await Transaction.findOne({
             where: {
                id: transactionId,
@@ -260,7 +279,6 @@ class WalletService {
          const wallet = pendingTransaction.wallet;
          const currentBalance = parseFloat(wallet.balance);
 
-         // Verificar se ainda tem saldo
          if (currentBalance < parseFloat(pendingTransaction.amount)) {
             throw new Error('Saldo insuficiente no momento da aprovação');
          }
@@ -268,13 +286,11 @@ class WalletService {
          const newBalance = currentBalance - parseFloat(pendingTransaction.amount);
          const newTotalSpent = parseFloat(wallet.totalSpent) + parseFloat(pendingTransaction.amount);
 
-         // Atualizar carteira
          await wallet.update({
             balance: newBalance,
             totalSpent: newTotalSpent
          }, { transaction });
 
-         // Atualizar transação
          await pendingTransaction.update({
             status: 'COMPLETED',
             processedBy: directorId,
@@ -325,7 +341,6 @@ class WalletService {
             throw new Error('Solicitação não encontrada ou já processada');
          }
 
-         // Atualizar transação como cancelada
          await pendingTransaction.update({
             status: 'CANCELLED',
             processedBy: directorId,
@@ -386,16 +401,29 @@ class WalletService {
    }
 
    // ✅ NOVO: Minhas solicitações (para usuário comum)
-   async getMyRequests(userId, page = 1, limit = 10) {
+   async getMyRequests(userId, page = 1, limit = 5) {
       try {
          const wallet = await this.getWalletByUserId(userId);
          const offset = (page - 1) * limit;
+
+         const allRequests = await Transaction.findAll({
+            where: {
+               walletId: wallet.id,
+               type: 'DEBIT',
+               status: 'PENDING'
+            },
+            attributes: ['amount']
+         });
+
+         const totalAmountRequests = allRequests.reduce((total, request) => {
+            return total + Number(request.amount);
+         }, 0);
 
          const { rows: myRequests, count } = await Transaction.findAndCountAll({
             where: {
                walletId: wallet.id,
                type: 'DEBIT',
-               status: ['PENDING', 'COMPLETED', 'CANCELLED']
+               status: 'PENDING'
             },
             include: [
                {
@@ -417,7 +445,8 @@ class WalletService {
                totalPages: Math.ceil(count / limit),
                totalItems: count,
                itemsPerPage: parseInt(limit)
-            }
+            },
+            summary: totalAmountRequests
          };
       } catch (error) {
          throw new Error(`Erro ao buscar minhas solicitações: ${error.message}`);
