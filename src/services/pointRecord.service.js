@@ -72,8 +72,6 @@ class PointRecordService {
         }
       }));
 
-      console.log(`✅ ${pointRecords.length} registros encontrados de ${count} total`);
-
       return {
         data: this.formatPointRecordsList(pointRecordsWithUser),
         pagination: {
@@ -92,6 +90,30 @@ class PointRecordService {
       };
     } catch (error) {
       throw new Error(`Erro ao listar registros de ponto: ${error.message}`);
+    }
+  }
+
+  async getLastPoint(userId) {
+    try {
+      const lastPoint = await PointRecord.findOne({
+        where: { userId: userId },
+        order: [['created_at',  'DESC']]
+      })
+
+      if(!lastPoint) {
+        return {
+          success: false,
+          message: 'Nenhum registro encontrado',
+          lastPointRecord: null
+        }
+      }
+
+      return {
+        lastPointRecord: lastPoint,
+        success: true
+      }
+    } catch (error) {
+      throw new Error('Erro interno ao buscar ultimo registro.', error.message)
     }
   }
 
@@ -148,6 +170,35 @@ class PointRecordService {
       };
     } catch (error) {
       throw new Error(`Erro ao buscar registro: ${error.message}`);
+    }
+  }
+
+  async closePoint(id) {
+    try {
+      const pointRecord = await PointRecord.findByPk(id)
+
+      if (!pointRecord) {
+        throw new Error('Registro de ponto não encontrado.')
+      }
+
+      if (pointRecord.exitDateHour) {
+        throw new Error('Esse ponto já esta fechado')
+      }
+
+      const exitTime = new Date()
+
+      const closedPoint = await PointRecord.update({
+        pointRecordStatus: 'APPROVED',
+        description: 'Ponto fechado por diretor.',
+        exitDateHour: exitTime
+      },  { where: { id }
+    })
+
+      return {
+        status_point_record: closedPoint.point_record_status,
+      }
+    } catch (error) {
+      throw new Error('Erro interno ao fechar ponto.')
     }
   }
 

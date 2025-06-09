@@ -260,10 +260,6 @@ class WalletController {
       try {
          const { dataInicio, dataFim, tipo } = req.query;
 
-         console.log('📋 Solicitação de exportação recebida:', {
-            dataInicio, dataFim, tipo, usuario: req.user.id
-         });
-
          if (dataInicio && !auxiliaryFunctions.isValidDate(dataInicio)) {
             return res.status(400).json({
                success: false,

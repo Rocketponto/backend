@@ -72,7 +72,6 @@ User.addHook('afterCreate', async (user, options) => {
 
   try {
     await walletService.createWallet(user.id);
-    console.log(`✅ Carteira criada para usuário: ${user.name}`);
   } catch (error) {
     console.error(`❌ Erro ao criar carteira para ${user.name}:`, error);
   }

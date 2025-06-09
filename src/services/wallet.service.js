@@ -669,18 +669,14 @@ class WalletService {
 
    async exportarRelatorio({ dataInicio, dataFim, tipo }) {
       try {
-         console.log('📋 Exportando relatório CSV:', { dataInicio, dataFim, tipo });
-
          const whereConditions = {
             status: 'COMPLETED'
          };
 
-         // ✅ Filtro por tipo
          if (tipo && tipo !== 'todos') {
             whereConditions.type = tipo.toUpperCase();
          }
 
-         // ✅ Filtro por data
          if (dataInicio || dataFim) {
             whereConditions.createdAt = {};
 
@@ -697,7 +693,6 @@ class WalletService {
             }
          }
 
-         // ✅ Buscar TODAS as transações (sem limit para export completo)
          const transacoes = await Transaction.findAll({
             where: whereConditions,
             include: [

@@ -1,3 +1,4 @@
+const { use } = require('../routes/pointRecord.route');
 const pointRecordService = require('../services/pointRecord.service');
 
 class PointRecordController {
@@ -22,11 +23,43 @@ class PointRecordController {
     }
   }
 
+  async closedPoint(req, res) {
+    try {
+      const { pointRecordId } = req.params
+
+      await pointRecordService.closePoint(pointRecordId)
+
+      res.status(201).json({
+        success: true,
+        message: 'Ponto fechado com sucesso!'
+       })
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        message: 'Erro ao fechar ponto.'
+      })
+    }
+  }
+
+  async getLastPoint(req, res) {
+    try {
+      const { userId } = req.params
+
+      const lastPoint = await pointRecordService.getLastPoint(userId)
+
+      res.status(200).json(lastPoint)
+    } catch (error) {
+      res.status(400).json({
+        success: false,
+        message: error.message
+      })
+    }
+  }
+
   async listUserPointRecords(req, res) {
     try {
       const { userId } = req.params;
       const { page = 1, limit = 10 } = req.query;
-      console.log("User id", userId)
       if (!userId) {
         return res.status(400).json({
           success: false,
