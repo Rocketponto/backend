@@ -47,31 +47,49 @@ class PointRecordService {
     }
   }
 
-  async listRecordPointsByUser(userId) {
+  async listRecordPointsByUser(userId, page = 1, limit = 10) {
     try {
       const user = await User.findByPk(userId);
       if (!user) {
         throw new Error('User not found');
       }
 
-      const pointRecords = await PointRecord.findAll({
+      const offset = (page - 1) * limit;
+
+      const { rows: pointRecords, count } = await PointRecord.findAndCountAll({
         where: { userId: userId },
-        order: [['entryDateHour', 'DESC']]
+        order: [['entryDateHour', 'DESC']],
+        limit: parseInt(limit),
+        offset: parseInt(offset)
       });
 
-      const pointRecordsWithUser = await Promise.all(
-        pointRecords.map(async (record) => {
-          const userData = await User.findByPk(record.userId, {
-            attributes: ['id', 'name', 'email']
-          });
-          return {
-            ...record.toJSON(),
-            user: userData
-          };
-        })
-      );
+      const pointRecordsWithUser = pointRecords.map(record => ({
+        ...record.toJSON(),
+        user: {
+          id: user.id,
+          name: user.name,
+          email: user.email
+        }
+      }));
 
-      return this.formatPointRecordsList(pointRecordsWithUser);
+      console.log(`✅ ${pointRecords.length} registros encontrados de ${count} total`);
+
+      return {
+        data: this.formatPointRecordsList(pointRecordsWithUser),
+        pagination: {
+          currentPage: parseInt(page),
+          totalPages: Math.ceil(count / limit),
+          totalItems: count,
+          itemsPerPage: parseInt(limit),
+          hasNextPage: page < Math.ceil(count / limit),
+          hasPrevPage: page > 1
+        },
+        summary: {
+          totalRecords: count,
+          recordsInProgress: pointRecordsWithUser.filter(r => r.pointRecordStatus === 'IN_PROGRESS').length,
+          recordsApproved: pointRecordsWithUser.filter(r => r.pointRecordStatus === 'APPROVED').length
+        }
+      };
     } catch (error) {
       throw new Error(`Erro ao listar registros de ponto: ${error.message}`);
     }

@@ -8,7 +8,7 @@ const router = express.Router();
 router.use(authMiddleware);
 
 router.post('/', pointRecordController.savePointRecord);
-router.get('/my-records', pointRecordController.listUserPointRecords);
+router.get('/my-records/:userId', pointRecordController.listUserPointRecords);
 router.get('/status', pointRecordController.getUserStatus);
 
 router.get('/all', authorize('DIRETOR'), pointRecordController.getAllPointRecords);

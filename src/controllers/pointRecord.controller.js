@@ -24,17 +24,44 @@ class PointRecordController {
 
   async listUserPointRecords(req, res) {
     try {
-      const userId = req.user.id;
-      const pointRecords = await pointRecordService.listRecordPointsByUser(userId);
+      const { userId } = req.params;
+      const { page = 1, limit = 10 } = req.query;
+      console.log("User id", userId)
+      if (!userId) {
+        return res.status(400).json({
+          success: false,
+          error: 'ID do usuário inválido'
+        });
+      }
+
+      if (page < 1 || limit < 1) {
+        return res.status(400).json({
+          success: false,
+          error: 'Página e limite devem ser maiores que 0'
+        });
+      }
+
+      if (limit > 100) {
+        return res.status(400).json({
+          success: false,
+          error: 'Limite máximo de 100 registros por página'
+        });
+      }
+
+      const result = await pointRecordService.listRecordPointsByUser(
+        userId,
+        parseInt(page),
+        parseInt(limit)
+      );
 
       res.json({
         success: true,
-        data: pointRecords
+        ...result
       });
     } catch (error) {
       res.status(400).json({
         success: false,
-        message: error.message
+        error: error.message
       });
     }
   }
