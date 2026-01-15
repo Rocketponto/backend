@@ -32,7 +32,7 @@ class PointRecordController {
       res.status(201).json({
         success: true,
         message: 'Ponto fechado com sucesso!'
-       })
+      })
     } catch (error) {
       res.status(500).json({
         success: false,
@@ -101,18 +101,19 @@ class PointRecordController {
 
   async getAllPointRecords(req, res) {
     try {
-      const { page = 1, limit = 10 } = req.query;
-      const result = await pointRecordService.getAllPointRecords(page, limit);
+      const { page = 1, limit = 10, name = '', date = '', status = '' } = req.query;
 
-      res.json({
-        success: true,
-        ...result
+      const result = await pointRecordService.getAllPointRecords({
+        page: parseInt(page),
+        limit: parseInt(limit),
+        name,
+        date,
+        status
       });
+
+      res.json({ success: true, ...result });
     } catch (error) {
-      res.status(400).json({
-        success: false,
-        message: error.message
-      });
+      res.status(400).json({ success: false, message: error.message });
     }
   }
 

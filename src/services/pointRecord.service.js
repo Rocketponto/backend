@@ -97,10 +97,10 @@ class PointRecordService {
     try {
       const lastPoint = await PointRecord.findOne({
         where: { userId: userId },
-        order: [['created_at',  'DESC']]
+        order: [['created_at', 'DESC']]
       })
 
-      if(!lastPoint) {
+      if (!lastPoint) {
         return {
           success: false,
           message: 'Nenhum registro encontrado',
@@ -117,39 +117,61 @@ class PointRecordService {
     }
   }
 
-  async getAllPointRecords(page = 1, limit = 10) {
+  async getAllPointRecords({ page = 1, limit = 10, name = '', date = '', status = '' }) {
     try {
+
       const offset = (page - 1) * limit;
 
+      const whereConditions = {};
+
+      if (status && status !== 'todos') {
+        whereConditions.pointRecordStatus = status.toUpperCase();
+      }
+
+      if (date) {
+        const dataInicio = new Date(date);
+        dataInicio.setHours(0, 0, 0, 0);
+
+        const dataFim = new Date(date);
+        dataFim.setHours(23, 59, 59, 999);
+
+        whereConditions.entryDateHour = {
+          [Op.between]: [dataInicio, dataFim]
+        };
+      }
+
+      const userWhere = name ? { name: { [Op.iLike]: `%${name}%` } } : undefined;
+
       const { rows, count } = await PointRecord.findAndCountAll({
+        where: whereConditions,
+        include: [{
+          model: User,
+          as: 'user',
+          attributes: ['id', 'name', 'email', 'role'],
+          where: userWhere,
+          required: !!name
+        }],
         order: [['entryDateHour', 'DESC']],
         limit: parseInt(limit),
         offset: parseInt(offset)
       });
 
-      const pointRecordsWithUser = await Promise.all(
-        rows.map(async (record) => {
-          const userData = await User.findByPk(record.userId, {
-            attributes: ['id', 'name', 'email']
-          });
-          return {
-            ...record.toJSON(),
-            user: userData
-          };
-        })
-      );
-
       return {
-        data: this.formatPointRecordsList(pointRecordsWithUser),
+        data: this.formatPointRecordsList(rows.map(r => r.toJSON())),
         pagination: {
           currentPage: parseInt(page),
           totalPages: Math.ceil(count / limit),
           totalItems: count,
           itemsPerPage: parseInt(limit)
+        },
+        filters: {
+          name: name || null,
+          date: date || null,
+          status: status || 'todos'
         }
       };
     } catch (error) {
-      throw new Error(`Erro ao buscar todos os registros: ${error.message}`);
+      throw new Error(`Erro ao buscar registros de ponto: ${error.message}`);
     }
   }
 
@@ -191,8 +213,9 @@ class PointRecordService {
         pointRecordStatus: 'APPROVED',
         description: 'Ponto fechado por diretor.',
         exitDateHour: exitTime
-      },  { where: { id }
-    })
+      }, {
+        where: { id }
+      })
 
       return {
         status_point_record: closedPoint.point_record_status,
