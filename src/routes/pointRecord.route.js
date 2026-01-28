@@ -13,5 +13,6 @@ router.get('/get-last-point/:userId', pointRecordController.getLastPoint)
 
 router.get('/all', authorize('DIRETOR'), pointRecordController.getAllPointRecords);
 router.put('/closed-point/:pointRecordId', authorize('DIRETOR'), pointRecordController.closedPoint)
+router.post('/manual', authorize('DIRETOR'), pointRecordController.createManualPointRecord);
 
 module.exports = router;

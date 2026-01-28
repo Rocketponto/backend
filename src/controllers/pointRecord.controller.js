@@ -23,6 +23,37 @@ class PointRecordController {
     }
   }
 
+  async createManualPointRecord(req, res) {
+    try {
+      const { directorId, userId, entryDateHour, exitDateHour, description } = req.body;
+
+      if (!directorId || !userId || !entryDateHour || !exitDateHour || !description) {
+        return res.status(400).json({
+          success: false,
+          message: 'Todos os campos são obrigatórios: !directorId, userId, entryDateHour, exitDateHour, description'
+        });
+      }
+
+      const pointRecord = await pointRecordService.createManualPointRecord(directorId, {
+        userId,
+        entryDateHour,
+        exitDateHour,
+        description
+      });
+
+      return res.status(201).json({
+        success: true,
+        message: 'Registro de ponto criado com sucesso',
+        data: pointRecord
+      });
+    } catch (error) {
+      return res.status(400).json({
+        success: false,
+        message: error.message
+      });
+    }
+  }
+
   async closedPoint(req, res) {
     try {
       const { pointRecordId } = req.params

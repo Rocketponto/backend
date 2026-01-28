@@ -47,6 +47,59 @@ class PointRecordService {
     }
   }
 
+  async createManualPointRecord(directorId, { userId, entryDateHour, exitDateHour, description }) {
+    try {
+      // Verificar se o diretor existe e tem permissão
+      const director = await User.findByPk(directorId);
+      if (!director) {
+        throw new Error('Diretor não encontrado');
+      }
+      if (director.role !== 'DIRETOR') {
+        throw new Error('Apenas diretores podem criar registros manuais');
+      }
+
+      // Verificar se o usuário alvo existe
+      const targetUser = await User.findByPk(userId);
+      if (!targetUser) {
+        throw new Error('Usuário não encontrado');
+      }
+
+      // Validar datas
+      const entryDate = new Date(entryDateHour);
+      const exitDate = new Date(exitDateHour);
+
+      if (isNaN(entryDate.getTime())) {
+        throw new Error('Data/hora de entrada inválida');
+      }
+
+      if (isNaN(exitDate.getTime())) {
+        throw new Error('Data/hora de saída inválida');
+      }
+
+      if (exitDate <= entryDate) {
+        throw new Error('A data/hora de saída deve ser posterior à data/hora de entrada');
+      }
+
+      // Validar descrição
+      if (!description || description.trim() === '') {
+        throw new Error('Descrição é obrigatória');
+      }
+
+      // Criar o registro de ponto manual
+      const pointRecord = await PointRecord.create({
+        userId: userId,
+        entryDateHour: entryDate,
+        exitDateHour: exitDate,
+        pointRecordStatus: 'APPROVED',
+        description: `[Registro Manual - ${director.name}] ${description.trim()}`
+      });
+
+      return await this.getPointRecordWithUser(pointRecord.id);
+    } catch (error) {
+      throw new Error(`Erro ao criar registro manual: ${error.message}`);
+    }
+  }
+
   async listRecordPointsByUser(userId, page = 1, limit = 10) {
     try {
       const user = await User.findByPk(userId);
